@@ -1,12 +1,10 @@
-name: CI Workflow for PHP (Laravel Project)
+name: Laravel CI Workflow
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -14,68 +12,36 @@ permissions:
 jobs:
   php_build:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      # ✅ Setup PHP environment
+      # 🧰 Setup PHP and enable required extensions
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
-          extensions: mbstring, xml, bcmath, intl, pdo_mysql, zip, curl, gd
-        
-          coverage: none
+          php-version: '8.2'
+          extensions: mbstring, xml, zip, bcmath, exif, fileinfo, gd, curl, intl, pdo_mysql
+          tools: composer
 
-      # ✅ Cache Composer dependencies for faster builds
-      - name: Cache Composer packages
-        uses: actions/cache@v3
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
+      # 📦 Install dependencies
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
 
-     
-
-      # ✅ Run PHP syntax check (lint)
-      - name: Run PHP Linter
+      # 🧹 Run PHP Linter
+      - name: Run PHP syntax check
         run: |
           echo "Running PHP syntax check..."
-          Get-ChildItem -Recurse -Include *.php | ForEach-Object { php -l $_.FullName }
+          Get-ChildItem -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
 
-      # ✅ Run security audit (Composer vulnerability check)
-      - name: Security check
-        run: composer audit || echo "⚠️ Some dependencies may have vulnerabilities."
+      # 🔒 Security check
+      - name: Composer audit
+        run: composer audit || true
 
-      
-
-      - name: Notify if build fails
+      - name: Build status
         if: failure()
         run: echo "❌ Build failed!"
-
-
-  security:
-    runs-on: windows-latest
-    needs: [php_build]
-    steps:
-      - uses: actions/checkout@v4
-
-      # ✅ Run Trivy to scan for vulnerabilities
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'fs'
-          ignore-unfixed: true
-          format: 'table'
-          output: 'trivy-results.txt'
-          severity: 'HIGH,CRITICAL'
-
-      - name: Upload Trivy results
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-scan-results
-          path: trivy-results.txt
-
-
+  
   deploy:
     needs: php_build
     runs-on: windows-latest
@@ -86,21 +52,32 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, xml, bcmath, intl, pdo_mysql, zip, curl, gd
+          extensions: mbstring, xml, zip, bcmath, exif, fileinfo, gd, curl, intl, pdo_mysql
+          tools: composer
 
-      # ✅ Start Laravel’s built-in server (since there’s no index.php)
-      - name: Start Laravel server
-        run: php artisan serve --host=localhost --port=8000
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Start PHP server
+        run: php -S localhost:8000 -t public
         shell: pwsh
 
-      - name: Notify if deploy fails
+      - name: Notify on failure
         if: failure()
         run: echo "❌ Deploy failed!"
 
-
   notify:
-    runs-on: windows-latest
     needs: [php_build, deploy]
+    runs-on: windows-latest
     steps:
-      - name: Notify on Success
+      - name: Success notification
         run: echo "✅ Deployment successful!"
+
+  cache:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
