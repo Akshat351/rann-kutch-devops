@@ -46,10 +46,7 @@ jobs:
       - name: Security check
         run: composer audit || echo "⚠️ Some dependencies may have vulnerabilities."
 
-      # ✅ Optional: Run Laravel Pint code style check
-      - name: Run Laravel Pint (Code Style)
-        run: vendor/bin/pint --test || echo "⚠️ Code style issues found."
-
+      
 
       - name: Notify if build fails
         if: failure()
