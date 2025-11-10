@@ -23,7 +23,7 @@ jobs:
         with:
           php-version: '8.1'
           extensions: mbstring, xml, bcmath, intl, pdo_mysql, zip, curl, gd
-          tools: composer
+        
           coverage: none
 
       # ✅ Cache Composer dependencies for faster builds
@@ -34,9 +34,7 @@ jobs:
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
-      # ✅ Install dependencies
-      - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
+     
 
       # ✅ Run PHP syntax check (lint)
       - name: Run PHP Linter
