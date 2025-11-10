@@ -1,0 +1,47 @@
+name: php basic website ci workflow
+on: 
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+  schedule:
+    - cron: '10 13 * * 0'
+  workflow_dispatch:
+
+jobs:
+  builds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: setting up php
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Installing dependencies
+        run: composer install
+        
+      - name: validate compose.json and composer.lock
+        run: composer validate --strict
+
+      - name: Caching dependencies
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+      - name: php lint
+        run: find . -name "*.php" -exec php -l {} \;
+
+      - name: Security Check
+        run: composer audit
+
+      - name: Install PHPStan
+        run: composer require --dev phpstan/phpstan:^1.0 --no-interaction
+        
+      - name: PHPStan analyse
+        run: vendor/bin/phpstan analyse src tests --level=max
+      
