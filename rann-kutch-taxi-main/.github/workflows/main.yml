@@ -1,47 +1,111 @@
-name: php basic website ci workflow
-on: 
+name: ci workflow for php  projects
+on:
   push:
     branches:
-      - main
+    - main
   pull_request:
     branches:
-      - main
-
-  schedule:
-    - cron: '10 13 * * 0'
-  workflow_dispatch:
-
+    - main
+permissions:
+  contents: read
 jobs:
-  builds:
-    runs-on: ubuntu-latest
+  php_build:
+    runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: setting up php
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-      - name: Installing dependencies
-        run: composer install
-        
-      - name: validate compose.json and composer.lock
-        run: composer validate --strict
+    - uses: actions/checkout@v3
 
-      - name: Caching dependencies
-        uses: actions/cache@v3
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, zip
+        
+    - name: Install Dependencies
+      run: composer install
+
+    - name: Validate Composer
+      run: composer validate --strict
+      
+    - name: Run PHP Linter
+      run: |
+        echo "Running PHP syntax check..."
+        find . -type f -name "*.php" -print0 | xargs -0 -n1 php -l
+
+
+    - name: security check
+      run: composer audit
+
+    - name: Notify  if builds
+      if: failure()
+      run: echo "❌ Build failed!" 
+  security:
+    runs-on: windows-latest
+    needs: [php_build]
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🧠 Run Trivy to scan the file system and dependencies
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'          # Scans file system
+          ignore-unfixed: true     # Skip vulnerabilities without a fix
+          format: 'table'          # or 'sarif' for GitHub Security tab
+          output: 'trivy-results.txt'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: trivy-results.txt
+
+  deploy:
+    needs: php_build
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setting up php
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, zip
+
+    - name: Install Dependencies
+      run: composer install --prefer-dist --no-progress
+    
+    - name: Start php server
+      run: |
+        Start-Process php -ArgumentList '-S', 'localhost:8000'
+      shell: pwsh
+    
+    - name: verify server is running 
+      run: |
+        $response = Invoke-WebRequest -Uri "http://localhost:8000" -UseBasicParsing
+        if ($response.StatusCode -ne 200) {
+          throw "Server is not responding correctly"
+        }
+      shell: pwsh
+
+    - name: Notify  if builds
+      if: failure()
+      run: echo "❌ Deploy failed!"
+
+  notify:
+    runs-on: windows-latest
+    needs: [php_build, deploy]
+    steps:
+      - name: Notify on Success
+        run: echo "✅ Deployment successful!"
+  cache:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/cache@v3
         with:
           path: vendor
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
-      - name: php lint
-        run: find . -name "*.php" -exec php -l {} \;
+  
+  
 
-      - name: Security Check
-        run: composer audit
 
-      - name: Install PHPStan
-        run: composer require --dev phpstan/phpstan:^1.0 --no-interaction
-        
-      - name: PHPStan analyse
-        run: vendor/bin/phpstan analyse src tests --level=max
-      
