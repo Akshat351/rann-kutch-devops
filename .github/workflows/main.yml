@@ -67,7 +67,7 @@ jobs:
         extensions: mbstring, xml, zip
 
     - name: Start php server
-      run: php -S localhost:8000 main.php
+      run: php -S localhost:8000 app.php
       shell: pwsh
     
     - name: Notify  if builds
