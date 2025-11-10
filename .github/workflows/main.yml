@@ -66,9 +66,6 @@ jobs:
         php-version: '8.2'
         extensions: mbstring, xml, zip
 
-    - name: Install Dependencies
-      run: composer install --prefer-dist --no-progress
-    
     - name: Start php server
       run: |
         Start-Process php -ArgumentList '-S', 'localhost:8000'
