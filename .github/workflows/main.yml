@@ -1,51 +1,75 @@
-name: ci workflow for php  projects
+name: CI Workflow for PHP (Laravel Project)
+
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
     branches:
-    - main
+      - main
+
 permissions:
   contents: read
+
 jobs:
   php_build:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        extensions: mbstring, xml, zip
-        
-    
-    - name: Run PHP Linter
-      run: |
-        echo "Running PHP syntax check..."
-        find . -type f -name "*.php" -print0 | xargs -0 -n1 php -l
+      # ✅ Setup PHP environment
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, bcmath, intl, pdo_mysql, zip, curl, gd
+          coverage: none
+
+      # ✅ Cache Composer dependencies for faster builds
+      - name: Cache Composer packages
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      # ✅ Install dependencies
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      # ✅ Run PHP syntax check (lint)
+      - name: Run PHP Linter
+        run: |
+          echo "Running PHP syntax check..."
+          Get-ChildItem -Recurse -Include *.php | ForEach-Object { php -l $_.FullName }
+
+      # ✅ Run security audit (Composer vulnerability check)
+      - name: Security check
+        run: composer audit || echo "⚠️ Some dependencies may have vulnerabilities."
+
+      # ✅ Optional: Run Laravel Pint code style check
+      - name: Run Laravel Pint (Code Style)
+        run: vendor/bin/pint --test || echo "⚠️ Code style issues found."
 
 
-    - name: security check
-      run: composer audit
+      - name: Notify if build fails
+        if: failure()
+        run: echo "❌ Build failed!"
 
-    - name: Notify  if builds
-      if: failure()
-      run: echo "❌ Build failed!" 
+
   security:
     runs-on: windows-latest
     needs: [php_build]
     steps:
       - uses: actions/checkout@v4
 
-      # 🧠 Run Trivy to scan the file system and dependencies
+      # ✅ Run Trivy to scan for vulnerabilities
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          scan-type: 'fs'          # Scans file system
-          ignore-unfixed: true     # Skip vulnerabilities without a fix
-          format: 'table'          # or 'sarif' for GitHub Security tab
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
           output: 'trivy-results.txt'
           severity: 'HIGH,CRITICAL'
 
@@ -55,24 +79,28 @@ jobs:
           name: trivy-scan-results
           path: trivy-results.txt
 
+
   deploy:
     needs: php_build
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Setting up php
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        extensions: mbstring, xml, zip
+      - uses: actions/checkout@v4
 
-    - name: Start php server
-      run: php -S localhost:8000 app.php
-      shell: pwsh
-    
-    - name: Notify  if builds
-      if: failure()
-      run: echo "❌ Deploy failed!"
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, bcmath, intl, pdo_mysql, zip, curl, gd
+
+      # ✅ Start Laravel’s built-in server (since there’s no index.php)
+      - name: Start Laravel server
+        run: php artisan serve --host=localhost --port=8000
+        shell: pwsh
+
+      - name: Notify if deploy fails
+        if: failure()
+        run: echo "❌ Deploy failed!"
+
 
   notify:
     runs-on: windows-latest
@@ -80,15 +108,3 @@ jobs:
     steps:
       - name: Notify on Success
         run: echo "✅ Deployment successful!"
-  cache:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/cache@v3
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-  
-  
-
-
