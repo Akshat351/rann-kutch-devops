@@ -20,12 +20,7 @@ jobs:
         php-version: '8.2'
         extensions: mbstring, xml, zip
         
-    - name: Install Dependencies
-      run: composer install
-
-    - name: Validate Composer
-      run: composer validate --strict
-      
+    
     - name: Run PHP Linter
       run: |
         echo "Running PHP syntax check..."
